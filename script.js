@@ -6,235 +6,267 @@ const notesContainer = document.getElementById('notes-container');
 const searchInput = document.getElementById('search');
 const viewToggleBtns = document.querySelectorAll('.view-toggle-btn');
 const colorOptions = document.querySelectorAll('.color-option');
-const themeToggleBtn = document.getElementById('theme-toggle');
 
-// State variables
-let notes = [];
+// Variables
+let notes = JSON.parse(localStorage.getItem('notes')) || [];
 let selectedColor = 'white';
-let editingNoteId = null;
-let darkMode = false;
 
 // Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
-    loadNotes();
-    loadThemePreference();
-    renderNotes();
+    // Remove any saved theme preference
+    localStorage.removeItem('theme');
+    
+    // Remove dark-theme class if it exists
+    document.body.classList.remove('dark-theme');
+    
+    displayNotes();
+    setupColorOptions();
+    setupViewToggle();
+    setupSearch();
 });
 
-// Add theme toggle event listener
-themeToggleBtn.addEventListener('click', () => {
-    toggleTheme();
-});
-
-// View toggle event listeners
-viewToggleBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-        viewToggleBtns.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        
-        const viewType = btn.dataset.view;
-        if (viewType === 'list') {
-            notesContainer.classList.add('list-view');
-        } else {
-            notesContainer.classList.remove('list-view');
-        }
-        
-        // Save view preference
-        localStorage.setItem('notesViewPreference', viewType);
-    });
-});
-
-// Color selection event listeners
-colorOptions.forEach(option => {
-    option.addEventListener('click', () => {
-        colorOptions.forEach(opt => opt.classList.remove('selected'));
-        option.classList.add('selected');
-        selectedColor = option.dataset.color;
-    });
+addNoteForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    saveNote();
 });
 
 // Functions
-function loadNotes() {
-    const storedNotes = localStorage.getItem('notes');
-    if (storedNotes) {
-        notes = JSON.parse(storedNotes);
-    }
-    
-    // Load view preference
-    const viewPreference = localStorage.getItem('notesViewPreference');
-    if (viewPreference === 'list') {
-        notesContainer.classList.add('list-view');
-        viewToggleBtns.forEach(btn => {
-            if (btn.dataset.view === 'list') {
-                btn.classList.add('active');
-            } else {
-                btn.classList.remove('active');
-            }
-        });
-    }
-}
-
-function loadThemePreference() {
-    const theme = localStorage.getItem('theme');
-    if (theme === 'dark') {
-        darkMode = true;
-        document.documentElement.setAttribute('data-theme', 'dark');
-        themeToggleBtn.innerHTML = '<i class="fas fa-sun"></i><span>Light Mode</span>';
-    }
-}
-
-function toggleTheme() {
-    darkMode = !darkMode;
-    if (darkMode) {
-        document.documentElement.setAttribute('data-theme', 'dark');
-        localStorage.setItem('theme', 'dark');
-        themeToggleBtn.innerHTML = '<i class="fas fa-sun"></i><span>Light Mode</span>';
-    } else {
-        document.documentElement.removeAttribute('data-theme');
-        localStorage.setItem('theme', 'light');
-        themeToggleBtn.innerHTML = '<i class="fas fa-moon"></i><span>Dark Mode</span>';
-    }
-}
-
-function saveNotes() {
-    localStorage.setItem('notes', JSON.stringify(notes));
-}
-
-function formatDate(timestamp) {
-    const date = new Date(timestamp);
-    return `${date.toLocaleDateString()} at ${date.toLocaleTimeString()}`;
-}
-
 function saveNote() {
     const title = noteTitleInput.value.trim();
     const content = noteContentInput.value.trim();
+    const timestamp = new Date().toISOString();
     
     if (!title || !content) return;
     
-    const newNote = {
-        id: Date.now().toString(),
-        title,
-        content,
-        color: selectedColor,
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-    };
+    // Check if we're editing an existing note
+    const editId = addNoteForm.dataset.editId;
     
-    notes.unshift(newNote);
-    saveNotes();
-    renderNotes();
-    
-    // Reset form
-    addNoteForm.reset();
-    colorOptions[0].click(); // Reset color selection
-}
-
-function updateNote() {
-    const title = noteTitleInput.value.trim();
-    const content = noteContentInput.value.trim();
-    
-    if (!title || !content) return;
-    
-    const noteIndex = notes.findIndex(note => note.id === editingNoteId);
-    if (noteIndex !== -1) {
-        notes[noteIndex].title = title;
-        notes[noteIndex].content = content;
-        notes[noteIndex].color = selectedColor;
-        notes[noteIndex].updatedAt = Date.now();
+    if (editId) {
+        // Find the note to update
+        const noteIndex = notes.findIndex(note => note.id === Number(editId));
         
-        saveNotes();
-        renderNotes();
-        
-        // Reset form and edit mode
-        addNoteForm.reset();
-        document.querySelector('h2').textContent = 'Add New Note';
-        document.querySelector('button[type="submit"]').textContent = 'Save Note';
-        editingNoteId = null;
-        colorOptions[0].click(); // Reset color selection
-    }
-}
-
-function editNote(id) {
-    const note = notes.find(note => note.id === id);
-    if (note) {
-        noteTitleInput.value = note.title;
-        noteContentInput.value = note.content;
-        document.querySelector('h2').textContent = 'Edit Note';
-        document.querySelector('button[type="submit"]').textContent = 'Update Note';
-        editingNoteId = id;
-        
-        // Select correct color
-        colorOptions.forEach(option => {
-            if (option.dataset.color === note.color) {
-                option.click();
-            }
-        });
-        
-        // Scroll to form
-        document.querySelector('.note-form').scrollIntoView({ behavior: 'smooth' });
-    }
-}
-
-function deleteNote(id) {
-    if (confirm('Are you sure you want to delete this note?')) {
-        notes = notes.filter(note => note.id !== id);
-        saveNotes();
-        renderNotes();
-        
-        // If deleting note being edited, reset form
-        if (editingNoteId === id) {
-            addNoteForm.reset();
-            document.querySelector('h2').textContent = 'Add New Note';
-            document.querySelector('button[type="submit"]').textContent = 'Save Note';
-            editingNoteId = null;
-            colorOptions[0].click(); // Reset color selection
+        if (noteIndex !== -1) {
+            // Update existing note
+            notes[noteIndex] = {
+                ...notes[noteIndex],
+                title,
+                content,
+                color: selectedColor,
+                timestamp // Update timestamp to show it was edited
+            };
         }
+    } else {
+        // Create new note
+        const newNote = {
+            id: Date.now(),
+            title,
+            content,
+            color: selectedColor,
+            timestamp
+        };
+        
+        notes.push(newNote);
     }
+    
+    saveToLocalStorage();
+    displayNotes();
+    resetForm();
 }
 
-function renderNotes() {
-    const searchTerm = searchInput.value.toLowerCase();
-    const filteredNotes = notes.filter(note => 
-        note.title.toLowerCase().includes(searchTerm) || 
-        note.content.toLowerCase().includes(searchTerm)
-    );
-    
+function saveToLocalStorage() {
+    localStorage.setItem('notes', JSON.stringify(notes));
+}
+
+function displayNotes(notesToDisplay = notes) {
+    // Clear notes container
     notesContainer.innerHTML = '';
     
-    if (filteredNotes.length === 0) {
-        const noNotesMessage = document.createElement('div');
-        noNotesMessage.className = 'no-notes';
-        noNotesMessage.textContent = searchTerm 
-            ? 'No notes found matching your search.' 
-            : 'No notes yet. Create your first note!';
-        notesContainer.appendChild(noNotesMessage);
+    if (notesToDisplay.length === 0) {
+        notesContainer.innerHTML = '<p class="no-notes">No notes yet. Create your first note!</p>';
         return;
     }
     
-    filteredNotes.forEach(note => {
+    // Get current view mode
+    const currentView = document.querySelector('.view-toggle-btn.active').dataset.view;
+    notesContainer.className = `notes-container ${currentView}-view`;
+    
+    // Create note elements
+    notesToDisplay.forEach(note => {
         const noteElement = document.createElement('div');
         noteElement.className = 'note';
+        noteElement.dataset.id = note.id;
         noteElement.style.backgroundColor = note.color;
         
+        // Calculate text color based on background brightness
+        const isDarkColor = isColorDark(note.color);
+        const textColor = isDarkColor ? '#ffffff' : '#212121';
+        
+        const formattedDate = new Date(note.timestamp).toLocaleString();
+        const truncatedContent = note.content.length > 150 ? 
+            note.content.substring(0, 150) + '...' : note.content;
+        
         noteElement.innerHTML = `
-            <div class="note-header">
+            <div class="note-header" >
                 <h3>${note.title}</h3>
+                <div class="note-actions">
+                    <a href="#" class="btn-edit" data-id="${note.id}" title="Edit note">
+                        <i class="fas fa-edit"></i>
+                    </a>
+                    <a href="#" class="btn-delete" data-id="${note.id}" title="Delete note">
+                        <i class="fas fa-trash"></i>
+                    </a>
+                </div>
             </div>
-            <p>${note.content}</p>
-            <div class="note-timestamp">
-                Created: ${formatDate(note.createdAt)}
-                ${note.updatedAt !== note.createdAt ? `<br>Updated: ${formatDate(note.updatedAt)}` : ''}
+            <div class="note-body" style="border-left: 4px solid ${note.color}">
+                <p class="note-content">${truncatedContent}</p>
             </div>
-            <div class="note-actions">
-                <button class="btn btn-info btn-small" onclick="editNote('${note.id}')">Edit</button>
-                <button class="btn btn-danger btn-small" onclick="deleteNote('${note.id}')">Delete</button>
-            </div>
+            <div class="note-footer">
+                <div class="note-metadata">
+                    <i class="far fa-calendar-alt"></i>
+                    <span class="note-date">${formattedDate}</span>
+                </div>
+                <div class="note-badge" style="background-color: ${note.color}"></div>
+            </div>   
         `;
         
         notesContainer.appendChild(noteElement);
     });
+    
+    // Add event listeners to the links
+    document.querySelectorAll('.btn-delete').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault(); // Prevent default link behavior
+            deleteNote(e);
+        });
+    });
+    
+    document.querySelectorAll('.btn-edit').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault(); // Prevent default link behavior
+            editNote(e);
+        });
+    });
+
+    // Add click event to expand note content
+    document.querySelectorAll('.note').forEach(note => {
+        note.addEventListener('click', (e) => {
+            // Only expand if not clicking on action buttons
+            if (!e.target.closest('.btn-edit') && !e.target.closest('.btn-delete')) {
+                note.classList.toggle('expanded');
+            }
+        });
+    });
 }
 
-// Make functions available globally
-window.editNote = editNote;
-window.deleteNote = deleteNote;
+// Helper function to determine if a color is dark
+function isColorDark(color) {
+    // Default to false for white or transparent
+    if (!color || color === 'white' || color === 'transparent') return false;
+    
+    // Convert hex to RGB
+    let r, g, b;
+    if (color.startsWith('#')) {
+        r = parseInt(color.slice(1, 3), 16);
+        g = parseInt(color.slice(3, 5), 16);
+        b = parseInt(color.slice(5, 7), 16);
+    } else {
+        return false; // For named colors just return false (assume light)
+    }
+    
+    // Calculate perceived brightness (YIQ formula)
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    return brightness < 128; // Below 128 is considered dark
+}
+
+function deleteNote(e) {
+    const id = Number(e.currentTarget.dataset.id);
+    notes = notes.filter(note => note.id !== id);
+    saveToLocalStorage();
+    displayNotes();
+}
+
+function editNote(e) {
+    const id = Number(e.currentTarget.dataset.id);
+    const noteToEdit = notes.find(note => note.id === id);
+    
+    if (noteToEdit) {
+        // Fill form with note data
+        noteTitleInput.value = noteToEdit.title;
+        noteContentInput.value = noteToEdit.content;
+        
+        // Set color option
+        colorOptions.forEach(option => {
+            if (option.dataset.color === noteToEdit.color) {
+                option.classList.add('selected');
+                selectedColor = noteToEdit.color;
+            } else {
+                option.classList.remove('selected');
+            }
+        });
+        
+        // Change form mode
+        addNoteForm.querySelector('button[type="submit"]').textContent = 'Update Note';
+        addNoteForm.dataset.editId = id;
+    }
+}
+
+function resetForm() {
+    noteTitleInput.value = '';
+    noteContentInput.value = '';
+    selectedColor = 'white';
+    
+    colorOptions.forEach(option => {
+        if (option.dataset.color === 'white') {
+            option.classList.add('selected');
+        } else {
+            option.classList.remove('selected');
+        }
+    });
+    
+    addNoteForm.querySelector('button[type="submit"]').textContent = 'Save Note';
+    delete addNoteForm.dataset.editId;
+}
+
+function setupColorOptions() {
+    colorOptions.forEach(option => {
+        option.addEventListener('click', () => {
+            // Remove selected class from all options
+            colorOptions.forEach(opt => opt.classList.remove('selected'));
+            
+            // Add selected class to clicked option
+            option.classList.add('selected');
+            
+            // Update selected color
+            selectedColor = option.dataset.color;
+        });
+    });
+}
+
+function setupViewToggle() {
+    viewToggleBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            // Remove active class from all buttons
+            viewToggleBtns.forEach(b => b.classList.remove('active'));
+            
+            // Add active class to clicked button
+            btn.classList.add('active');
+            
+            // Update view
+            displayNotes();
+        });
+    });
+}
+
+function setupSearch() {
+    searchInput.addEventListener('input', () => {
+        const searchTerm = searchInput.value.toLowerCase();
+        
+        const filteredNotes = searchTerm ? 
+            notes.filter(note => 
+                note.title.toLowerCase().includes(searchTerm) || 
+                note.content.toLowerCase().includes(searchTerm)
+            ) : notes;
+        
+        displayNotes(filteredNotes);
+    });
+}
